@@ -4,34 +4,42 @@ import sys
 
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static, Button, ListView, ListItem, Label, Input
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal
 from textual.reactive import reactive
 from rich.text import Text
 
 class JumpLine(Static):
     """Widget to render jump lines for jnz instructions."""
-    def __init__(self, jump_map, *args, **kwargs):
+
+    def __init__(self, *args, **kwargs):
         super().__init__("", *args, **kwargs)
-        self.jump_map = jump_map  # {line_from: line_to}
-        # self.max_line = max_line
+        self.jump_map = {}
+
+    def update_jump_map(self, jump_map):
+        """Update the jump map."""
+        self.jump_map = jump_map
+        self.refresh()
 
     def render(self) -> Text:
         """Render jump lines."""
         lines = []
-        for line_number in range(self.code_view.item_count):
-            if line_number in self.jump_map:
-                target = self.jump_map[line_number]
-                if target > line_number:
-                    lines.append(">─┐")
+        if hasattr(self, "code_view"):
+            for line_number in range(len(self.jump_map)):  # Corrected to use item_count
+                if line_number in self.jump_map:
+                    target = self.jump_map[line_number]
+                    if target > line_number:
+                        lines.append(Text(">─┐", style="#e06c75"))
+                    else:
+                        lines.append(Text(">─┘", style="#e06c75"))
+                elif any(line_number > start and line_number < end for start, end in self.jump_map.items() if end > start):
+                    lines.append(Text("│  ", style="#e06c75"))
+                elif any(line_number < start and line_number > end for start, end in self.jump_map.items() if end < start):
+                    lines.append(Text("│  ", style="#e06c75"))
                 else:
-                    lines.append(">─┘")
-            elif any(line_number > start and line_number < end for start, end in self.jump_map.items() if end > start):
-                lines.append("│  ")
-            elif any(line_number < start and line_number > end for start, end in self.jump_map.items() if end < start):
-                lines.append("│  ")
-            else:
-                lines.append("   ")
-        return Text("\n".join(lines))
+                    lines.append(Text("   "))
+            return Text("\n").join(lines)
+        else:
+            return Text("")
 
 class DebuggerApp(App):
     """Textual debugger app for a simple assembly language."""
@@ -49,9 +57,6 @@ class DebuggerApp(App):
         yield Header()
         yield Footer()
 
-        # Prepare jump map for JumpLine widget
-        jump_map = self.computer.get_jump_map()
-
         # Main UI layout
         yield Container(
             Horizontal(
@@ -61,18 +66,16 @@ class DebuggerApp(App):
                 id="titles"
             ),
             Horizontal(
-                # Use VerticalScroll for the code view and jump lines
-                VerticalScroll(
-                    Horizontal(
-                        Static(id="jump-line"),  # JumpLine is now a Static widget
-                        ListView(*[
-                            ListItem(Label(line))
-                            for line in self.formatted_code_lines()
-                        ], id="code-view", disabled=True),
-                    ),
-                    id="code-container"  # Changed to code-container
+                # No more VerticalScroll, just a Horizontal container
+                Horizontal(
+                    JumpLine(id="jump-line"),
+                    ListView(*[
+                        ListItem(Label(line))
+                        for line in self.formatted_code_lines()
+                    ], id="code-view", disabled=True),
+                    id="code-container"
                 ),
-                VerticalScroll(
+                Container(
                     Static(self.computer.get_registers(), id="register-view"),
                     Container(
                         Input(placeholder="Reg A", id="reg-a-input"),
@@ -105,8 +108,21 @@ class DebuggerApp(App):
 
     def on_mount(self) -> None:
         """UI setup after mounting."""
+        self.check_terminal_size()
         self.update_highlighted_line()
         self.update_jump_lines()
+
+        # Set the code_view attribute for jump_line
+        jump_line = self.query_one("#jump-line")
+        jump_line.code_view = self.query_one("#code-view")
+
+    def check_terminal_size(self):
+        """Check if there's enough space to render the UI."""
+        code_lines = len(self.formatted_code_lines())
+        required_height = code_lines + 10  # 10 is an estimate of the other UI elements
+
+        if required_height > self.size.height:
+            self.exit(f"Error: Not enough vertical space to display the code. Required: {required_height}, Available: {self.size.height}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -128,11 +144,6 @@ class DebuggerApp(App):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id in ["reg-a-input", "reg-b-input", "reg-c-input"]:
             self.set_registers()
-
-    def on_list_view_scroll_to(self, event: ListView.scroll_to) -> None:
-        """Synchronize scrolling of JumpLine with ListView."""
-        if event.control == self.query_one("#code-view"):
-            self.query_one(JumpLine).scroll_to(y=event.y)
 
     def step_forward(self, steps):
         """Execute one step of the program."""
@@ -182,11 +193,11 @@ class DebuggerApp(App):
 
     def update_ui(self):
         """Update register, output, and code views."""
-        self.query_one("#register-view").update(self.computer.get_registers())
+        self.update_register_display()
         self.update_output_view()
         self.update_highlighted_line()
         self.update_info_view()
-        self.update_jump_lines()  # Add this line to update jump lines
+        self.update_jump_lines()
 
     def update_output_view(self):
         """Update the output view."""
@@ -237,10 +248,24 @@ class DebuggerApp(App):
         jump_map = self.computer.get_jump_map()
         code_view = self.query_one("#code-view")
         jump_line = self.query_one("#jump-line")
-        jump_line.jump_map = jump_map
-        # jump_line.max_line = code_view.item_count - 1
+        jump_line.update_jump_map(jump_map)
         jump_line.code_view = code_view
         jump_line.refresh()
+
+    def update_register_display(self):
+        """Update the register display with decimal, binary, and hex values."""
+        register_view = self.query_one("#register-view")
+        register_view.update(self.get_registers_display())
+
+    def get_registers_display(self):
+        """Format the register values in decimal, binary, and hexadecimal."""
+        reg_a = self.computer.reg_a
+        reg_b = self.computer.reg_b
+        reg_c = self.computer.reg_c
+
+        return (f"Reg A: {reg_a:10} (0b{reg_a:032b}) (0x{reg_a:08x})\n"
+                f"Reg B: {reg_b:10} (0b{reg_b:032b}) (0x{reg_b:08x})\n"
+                f"Reg C: {reg_c:10} (0b{reg_c:032b}) (0x{reg_c:08x})")
 
 class Computer(object):
     def __init__(self, reg_a: int, reg_b: int, reg_c: int, program: list[int]):

@@ -3,7 +3,7 @@ import itertools
 import sys
 
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, Static, Button, ListView, ListItem, Label, Input
+from textual.widgets import Footer, Header, Static, Button, Input
 from textual.containers import Container, Horizontal
 from textual.reactive import reactive
 from rich.text import Text
@@ -24,7 +24,7 @@ class JumpLine(Static):
         """Render jump lines."""
         lines = []
         if hasattr(self, "code_view"):
-            for line_number in range(len(self.jump_map)):  # Corrected to use item_count
+            for line_number in range(self.lines_of_code):
                 if line_number in self.jump_map:
                     target = self.jump_map[line_number]
                     if target > line_number:
@@ -66,13 +66,10 @@ class DebuggerApp(App):
                 id="titles"
             ),
             Horizontal(
-                # No more VerticalScroll, just a Horizontal container
+                # Use Static for code view instead of ListView
                 Horizontal(
                     JumpLine(id="jump-line"),
-                    ListView(*[
-                        ListItem(Label(line))
-                        for line in self.formatted_code_lines()
-                    ], id="code-view", disabled=True),
+                    Static(self.get_formatted_code_lines(), id="code-view"),  # Pass formatted code to Static
                     id="code-container"
                 ),
                 Container(
@@ -109,17 +106,17 @@ class DebuggerApp(App):
     def on_mount(self) -> None:
         """UI setup after mounting."""
         self.check_terminal_size()
-        self.update_highlighted_line()
-        self.update_jump_lines()
+        self.update_ui()
 
         # Set the code_view attribute for jump_line
         jump_line = self.query_one("#jump-line")
+        jump_line.lines_of_code = len(self.computer.get_program())
         jump_line.code_view = self.query_one("#code-view")
 
     def check_terminal_size(self):
         """Check if there's enough space to render the UI."""
-        code_lines = len(self.formatted_code_lines())
-        required_height = code_lines + 10  # 10 is an estimate of the other UI elements
+        code_lines = len(self.get_formatted_code_lines().split('\n'))
+        required_height = code_lines + 10
 
         if required_height > self.size.height:
             self.exit(f"Error: Not enough vertical space to display the code. Required: {required_height}, Available: {self.size.height}")
@@ -195,7 +192,7 @@ class DebuggerApp(App):
         """Update register, output, and code views."""
         self.update_register_display()
         self.update_output_view()
-        self.update_highlighted_line()
+        self.update_code_view()
         self.update_info_view()
         self.update_jump_lines()
 
@@ -204,10 +201,11 @@ class DebuggerApp(App):
         output_str = self.computer.get_output()
         self.query_one("#output-view").update(output_str)
 
-    def update_highlighted_line(self):
-        """Highlight the current instruction in the code view."""
+    def update_code_view(self):
+        """Update the code view with formatted code lines and highlight."""
         code_view = self.query_one("#code-view")
-        code_view.index = self.instruction_ptr // 2
+        code_view.update(self.get_formatted_code_lines())
+        # self.update_highlighted_line()  # No longer needed with Static code view
 
     def update_info_view(self):
         """Update instruction pointer and total steps display."""
@@ -235,13 +233,17 @@ class DebuggerApp(App):
         self.query_one("#run-button").disabled = False
         self.query_one("#set-registers-button").disabled = False
 
-    def formatted_code_lines(self):
-        """Format code lines for display in the ListView."""
+    def get_formatted_code_lines(self) -> Text:
+        """Format code lines for display in the Static widget."""
         formatted_lines = []
         for line_number, op_name, arg_name, human in self.computer.get_program():
-            formatted_line = f"{line_number:<4} {op_name:<6} {arg_name:<8} # {human}"
+            # Highlight the current instruction pointer
+            if line_number == self.instruction_ptr // 2:
+                formatted_line = Text(f"{line_number:<4} {op_name:<6} {arg_name:<8} # {human}", style="bold magenta")
+            else:
+                formatted_line = Text(f"{line_number:<4} {op_name:<6} {arg_name:<8} # {human}")
             formatted_lines.append(formatted_line)
-        return formatted_lines
+        return Text("\n").join(formatted_lines)
 
     def update_jump_lines(self):
         """Update the jump lines to the left of the code."""
@@ -462,8 +464,6 @@ def main():
         program = [int(op) for op in program.split(',')]
 
         comp = Computer(reg_a, reg_b, reg_c, program)
-        # comp.run()
-        # print(comp.get_output())
     app = DebuggerApp(comp)
     app.run()
 

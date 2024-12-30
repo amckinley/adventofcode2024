@@ -14,32 +14,41 @@ class JumpLine(Static):
     def __init__(self, *args, **kwargs):
         super().__init__("", *args, **kwargs)
         self.jump_map = {}
+        self.loc = None
 
     def update_jump_map(self, jump_map):
         """Update the jump map."""
         self.jump_map = jump_map
+        self.inverse_jump_map =  {v: k for k, v in jump_map.items()}
         self.refresh()
 
     def render(self) -> Text:
         """Render jump lines."""
         lines = []
-        if hasattr(self, "code_view"):
-            for line_number in range(self.lines_of_code):
-                if line_number in self.jump_map:
-                    target = self.jump_map[line_number]
-                    if target > line_number:
-                        lines.append(Text(">─┐", style="#e06c75"))
-                    else:
-                        lines.append(Text(">─┘", style="#e06c75"))
-                elif any(line_number > start and line_number < end for start, end in self.jump_map.items() if end > start):
-                    lines.append(Text("│  ", style="#e06c75"))
-                elif any(line_number < start and line_number > end for start, end in self.jump_map.items() if end < start):
-                    lines.append(Text("│  ", style="#e06c75"))
+        code_length = self.loc
+
+        for line_number in range(code_length):
+            if line_number in self.inverse_jump_map:
+                target = self.inverse_jump_map[line_number]
+                if target > line_number:
+                    lines.append(Text("┌─>", style="#e06c75"))
                 else:
-                    lines.append(Text("   "))
-            return Text("\n").join(lines)
-        else:
-            return Text("")
+                    lines.append(Text("└─>", style="#e06c75"))
+
+            elif line_number in self.jump_map:
+                target = self.jump_map[line_number]
+                if target > line_number:
+                    lines.append(Text("┌─<", style="#e06c75"))
+                elif target < line_number:
+                    lines.append(Text("└─<", style="#e06c75"))
+
+            elif any(line_number > start and line_number < end for start, end in self.jump_map.items() if end > start):
+                lines.append(Text("│  ", style="#e06c75"))
+            elif any(line_number < start and line_number > end for start, end in self.jump_map.items() if end < start):
+                lines.append(Text("│  ", style="#e06c75"))
+            else:
+                lines.append(Text("   "))
+        return Text("\n").join(lines)
 
 class DebuggerApp(App):
     """Textual debugger app for a simple assembly language."""
@@ -70,6 +79,7 @@ class DebuggerApp(App):
                 Horizontal(
                     JumpLine(id="jump-line"),
                     Static(self.get_formatted_code_lines(), id="code-view"),  # Pass formatted code to Static
+
                     id="code-container"
                 ),
                 Container(
@@ -110,13 +120,13 @@ class DebuggerApp(App):
 
         # Set the code_view attribute for jump_line
         jump_line = self.query_one("#jump-line")
-        jump_line.lines_of_code = len(self.computer.get_program())
         jump_line.code_view = self.query_one("#code-view")
+        jump_line.loc = len(self.computer.get_program())
 
     def check_terminal_size(self):
         """Check if there's enough space to render the UI."""
-        code_lines = len(self.get_formatted_code_lines().split('\n'))
-        required_height = code_lines + 10
+        code_lines = len(self.computer.get_program())
+        required_height = code_lines + 10  # 10 is an estimate of the other UI elements
 
         if required_height > self.size.height:
             self.exit(f"Error: Not enough vertical space to display the code. Required: {required_height}, Available: {self.size.height}")

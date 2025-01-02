@@ -1,6 +1,20 @@
 import itertools
-from collections import deque
+import heapq
 from functools import cache
+import unittest
+
+class TestPathCost(unittest.TestCase):
+    def setUp(self):
+        self.k = DirKeypad()
+
+    def test_path_cost(self):
+        self.assertEqual(self.k.get_cost_for_path('^^'), 0)
+        self.assertEqual(self.k.get_cost_for_path('^<'), 1)
+        self.assertEqual(self.k.get_cost_for_path('^>^'), 2)
+        self.assertEqual(self.k.get_cost_for_path('^v^'), 2)
+        self.assertEqual(self.k.get_cost_for_path('^^^>'), 1)
+
+
 
 class Keypad(object):
     STEPS = {
@@ -65,29 +79,49 @@ class Keypad(object):
         self.pressed.append(button_name)
 
     @cache
+    def get_cost_for_path(self, path):
+        """
+        Add 1 for each direction change
+        """
+        acc = 0
+        for a, b in itertools.pairwise(path):
+            if a != b:
+                acc += 1
+        return acc
+
+    @cache
     def get_cached_shortest_path(self, pad_type, start_key, end_key):
         """
-        BFS to find the shortest path between start and end keys. Cache
-        this so we only have to compute it once.
+        Dijkstra to find the shortest path between start and end keys. Note that we define the path cost as
+        the number of direction changes, NOT the number of button pushes.
+
+        This prefers sequences like '^^>' over '^>^', even though these represent the same end position.
+        The latter path is more expensive at higher levels of keypads, because it means you can press 'A'
+        multiple times consecutively instead of needing to change directions and return back to 'A'
         """
         start = self.get_key_pos(start_key)
         end = self.get_key_pos(end_key)
 
         visited = set()
-        q = deque()
-        q.append((start, []))
+        q = []
+        heapq.heappush(q, (0, start, ''))
         visited.add(start)
 
         while q:
-            cur, path = q.popleft()
+            cost, cur, path = heapq.heappop(q)
+
             if cur == end:
-                return ''.join(path)
+                return path
 
             for n_row, n_col, d in self.get_neighbors(*cur):
                 if (n_row, n_col) in visited:
                     continue
                 n = (n_row, n_col)
-                q.append((n, path + [d]))
+                new_path = path + d
+                # print(f'cost is {cost}, path {path}')
+                new_cost = cost + self.get_cost_for_path(new_path)
+                heapq.heappush(q, (new_cost, n, new_path))
+                # q.append((n, path + [d]))
 
         raise ValueError("no path??")
 
@@ -153,7 +187,7 @@ def get_top_level_path_len(target_output):
     return len(cold_dpad_path)
 
 def main():
-    with open('input/day21_input_ex.txt', 'r') as f:
+    with open('input/day21_input.txt', 'r') as f:
         acc = 0
         for l in f.readlines():
             l = l.strip()
@@ -165,32 +199,6 @@ def main():
         print(acc)
 
 
-
-
-
-
-    # # print(p)
-    # # for p_chunk in p:
-    # #     for m in p_chunk:
-    # #         k.move(m)
-    # #     k.press()
-
-    # desired_path = 'A'.join(p) + 'A'
-    # print("done with part A, dp = ", desired_path)
-    # d_pad = DirKeypad()
-    # p2 = d_pad.find_path_for_output(desired_path)
-
-    # print(p2)
-    # for p_chunk in p2:
-    #     if p_chunk:
-    #         for m in p_chunk:
-    #             print('moving', m)
-    #             d_pad.move(m)
-    #     d_pad.press()
-
-    # print(d_pad.pressed)
-
-
-
 if __name__ == "__main__":
-    main()
+    unittest.main()
+    # main()

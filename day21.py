@@ -89,6 +89,7 @@ class Keypad(object):
                 acc += 1
         return acc
 
+    # XXX: note that this decorator doesnt work correctly because it isnt shared between instances
     @cache
     def get_cached_shortest_path(self, pad_type, start_key, end_key):
         """
@@ -111,6 +112,7 @@ class Keypad(object):
             cost, cur, path = heapq.heappop(q)
 
             if cur == end:
+                print(f'cost is {cost}, path {path}')
                 return path
 
             for n_row, n_col, d in self.get_neighbors(*cur):
@@ -118,7 +120,6 @@ class Keypad(object):
                     continue
                 n = (n_row, n_col)
                 new_path = path + d
-                # print(f'cost is {cost}, path {path}')
                 new_cost = cost + self.get_cost_for_path(new_path)
                 heapq.heappush(q, (new_cost, n, new_path))
                 # q.append((n, path + [d]))
@@ -187,6 +188,15 @@ def get_top_level_path_len(target_output):
     return len(cold_dpad_path)
 
 def main():
+    """
+    guessed 161120, too high
+
+    for code 341A, path of len 72, prefix 341
+    for code 803A, path of len 80, prefix 803
+    for code 149A, path of len 76, prefix 149
+    for code 683A, path of len 68, prefix 683
+    for code 208A, path of len 70, prefix 208
+    """
     with open('input/day21_input.txt', 'r') as f:
         acc = 0
         for l in f.readlines():
@@ -200,5 +210,5 @@ def main():
 
 
 if __name__ == "__main__":
-    unittest.main()
-    # main()
+    # unittest.main()
+    main()

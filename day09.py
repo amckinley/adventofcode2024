@@ -6,9 +6,10 @@ import termcolor
 class DiskMap(object):
     def __init__(self, map_str: str):
         self.map_str = map_str
-
         blocks = []
-        free_space_start_idxs = []
+
+        # tuples of (start_idx, len)
+        free_blocks = []
         free_blocks_remaining = 0
         file_id = 0
 
@@ -19,16 +20,16 @@ class DiskMap(object):
 
             if len(vals) == 2 and int(vals[1]):
                 f_len = int(vals[1])
-                free_space_start_idxs.append(len(blocks))
+                free_blocks.append((len(blocks), f_len))
                 blocks.extend([None] * f_len)
                 free_blocks_remaining += f_len
 
         self.blocks = blocks
-        self.free_space_start_idxs = free_space_start_idxs
+        self.free_blocks = free_blocks
         self.free_blocks_remaining = free_blocks_remaining
 
     def __str__(self) -> str:
-        # first chunk up the block list
+        # first, chunk up the block list
         groups = [list(group) for key, group in itertools.groupby(self.blocks)]
 
         c_list = list(termcolor.COLORS.keys())
@@ -51,7 +52,8 @@ class DiskMap(object):
         return ''.join(buf)
 
     def compact_part1(self) -> None:
-        free_block_idx = self.free_space_start_idxs.pop(0)
+        start_idxs = [start for start, free_len in self.free_blocks]
+        free_block_idx = start_idxs.pop(0)
         src_idx = -1
 
         # because we delete any trailing free space, this is our exit condition
@@ -59,7 +61,7 @@ class DiskMap(object):
             # print('before', self)
             # we've exhausted the current free block
             if self.blocks[free_block_idx] != None:
-                free_block_idx = self.free_space_start_idxs.pop(0)
+                free_block_idx = start_idxs.pop(0)
 
             dest_contents = self.blocks.pop()
 
@@ -99,10 +101,9 @@ def main():
         # dm = DiskMap('12345')
         # dm = DiskMap('2333133121414131402')
         # print(dm.blocks)
-        print(dm.free_space_start_idxs)
         # print(dm)
         dm.compact_part1()
-        dm.compact_part2()
+        # dm.compact_part2()
         print(dm)
         print(dm.get_checksum())
         # print(dm)

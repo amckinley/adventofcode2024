@@ -101,8 +101,8 @@ class BathroomMap(object):
         self.total_steps += step_count
 
     def get_safety_factor(self):
-        # correct boundaries for 7 x 11
-        0, 3, 0, 5
+        # correct boundaries for 7 x 11:
+        # 0, 3, 0, 5
         quad_boundaries = [
             #r_start,              r_end,            c_start,             c_end
             (0,                    self.height // 2, 0,                   self.width // 2), # ▟

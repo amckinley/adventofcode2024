@@ -15,7 +15,6 @@ class TestPathCost(unittest.TestCase):
         self.assertEqual(self.k.get_cost_for_path('^^^>'), 1)
 
 
-
 class Keypad(object):
     STEPS = {
         '>': (0, 1),  # right
@@ -97,8 +96,8 @@ class Keypad(object):
         the number of direction changes, NOT the number of button pushes.
 
         This prefers sequences like '^^>' over '^>^', even though these represent the same end position.
-        The latter path is more expensive at higher levels of keypads, because it means you can press 'A'
-        multiple times consecutively instead of needing to change directions and return back to 'A'
+        The latter path is more expensive at higher levels of keypads, because its cheaper to repeatedly
+        press 'A' rather than moving to a different button.
         """
         start = self.get_key_pos(start_key)
         end = self.get_key_pos(end_key)
@@ -112,7 +111,7 @@ class Keypad(object):
             cost, cur, path = heapq.heappop(q)
 
             if cur == end:
-                print(f'cost is {cost}, path {path}')
+                # print(f'cost is {cost}, path {path}')
                 return path
 
             for n_row, n_col, d in self.get_neighbors(*cur):
@@ -160,7 +159,7 @@ class NumKeypad(Keypad):
         return self.get_cached_shortest_path('num', start_key, end_key)
 
 class DirKeypad(Keypad):
-    def __init__(self):
+    def __init__(self, controlled_pad):
         super().__init__()
         self.loc = (0, 2)
         self.width = 3
@@ -170,22 +169,22 @@ class DirKeypad(Keypad):
             [None, '^', 'A'],
             ['<',  'v', '>'],
         ]
+        self.controlled_pad = controlled_pad
 
     def get_shortest_path(self, start_key, end_key):
         return self.get_cached_shortest_path('num', start_key, end_key)
 
-def get_top_level_path_len(target_output):
-    numpad = NumKeypad()
-    numpad_path = numpad.find_path_for_output(target_output)
-    # print(len(numpad_path), len('<A^A>^^AvvvA'))
+def get_top_level_path_len(initial_target, num_layers):
+    prev_pad = NumKeypad()
+    target_path = prev_pad.find_path_for_output(initial_target)
 
-    rad_dpad = DirKeypad()
-    rad_dpad_path = rad_dpad.find_path_for_output(numpad_path)
-    # print(len(rad_dpad_path), len('v<<A>>^A<A>AvA<^AA>A<vAAA>^A'))
+    d_pads_added = 0
+    while d_pads_added < num_layers:
+        dpad = DirKeypad(prev_pad)
+        target_path = dpad.find_path_for_output(target_path)
+        d_pads_added += 1
 
-    cold_dpad = DirKeypad()
-    cold_dpad_path = cold_dpad.find_path_for_output(rad_dpad_path)
-    return len(cold_dpad_path)
+    return len(target_path)
 
 def main():
     """
@@ -201,7 +200,7 @@ def main():
         acc = 0
         for l in f.readlines():
             l = l.strip()
-            p_len = get_top_level_path_len(l)
+            p_len = get_top_level_path_len(l, 2)
             num_prefix = int(l[0:3])
             print(f'for code {l}, path of len {p_len}, prefix {num_prefix}')
             acc += p_len * num_prefix

@@ -41,7 +41,7 @@ class Maze(object):
                 break
 
             # check for an obstacle
-            if self.lines[n_row][n_col] == '#':
+            while self.lines[n_row][n_col] == '#':
                 dir_idx = (dir_idx + 1) % 4
                 r_off, c_off = self.OFFSETS[dir_idx]
                 n_row, n_col = row + r_off, col + c_off
@@ -74,7 +74,7 @@ class Maze(object):
             if (n_row, n_col, dir_idx) in loop_check:
                 return True
 
-            # check for an obstacle (either existing or that we want to simulate)
+            # keep turning until we dont have an obstacle in front of us
             while self.lines[n_row][n_col] == '#' or (obs_row, obs_col) == (n_row, n_col):
                 dir_idx = (dir_idx + 1) % 4
                 r_off, c_off = self.OFFSETS[dir_idx]
@@ -93,7 +93,6 @@ class Maze(object):
         return acc
 
 def main():
-    # 1455 is incorrect
     with open('input/day6_input.txt', 'r') as f:
         m = Maze([l.strip() for l in f.readlines()])
         visited = m.run()
